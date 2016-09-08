@@ -7,12 +7,14 @@ import java.text.ParseException;
 public class Main {
 
     public static void main(String[] args) throws ParseException, IOException {
-        //MetricComputation.computeThreshold("st", 10, "data\\old_MOOC\\st\\", 5);
+        //MetricComputation.computeThreshold("precalc", 12, "data\\precalc\\", 5);
         //MetricComputation.computeThreshold("dw", 10, "data\\old_MOOC\\dw\\", 5);
 
-        MetricComputation.computeMetrics("st", 8, "data\\old_MOOC\\st\\");
+        MetricComputation.computeMetrics("precalc", 1, "data\\precalc\\");
         //MetricComputation.computeMetrics("dw", 10, "data\\old_MOOC\\dw\\");
 
+        //System.out.println(args[0]);
+        //MetricComputation.computeMetrics(args[0], Integer.parseInt(args[1]), args[2]);
 
     }
 }

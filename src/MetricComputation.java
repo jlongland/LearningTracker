@@ -2,7 +2,6 @@
 import com.opencsv.CSVReader;
 import com.opencsv.CSVWriter;
 
-import javax.jws.soap.SOAPBinding;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -21,47 +20,69 @@ public class MetricComputation {
     static HashMap<String, UserMetricComputation> users;
     static List<String> graduates;
     static HashMap<String, Integer> problems;
+    static HashMap<String, Integer> videoLengths;
     static HashMap<Integer, Integer> maximums;
+
+    static HashMap<Integer, Double> thresholds;
 
     static HashMap<Integer, BiFunction<UserMetricComputation, Integer, Integer>> metricMethods;
 
     public static void computeMetrics(String course, int week, String path) throws IOException, ParseException {
         String thresholdPath = path + "thresholds\\";
         String dataPath = path + "week" + week + "\\data\\";
-        String metricsPath = path + "week" + week + "\\metrics";
+        String metricsPath = path + "week" + week + "\\metrics\\";
+        Edition edition = Edition.CURRENT;
 
         System.out.println("Initializing course for week " + week + " ... " + course.toUpperCase());
         initialize();
 
+        System.out.println("Computing study sittings for week " + week + " ... " + course.toUpperCase());
+        Sitting.computeSittings(path + "learners.csv", dataPath);
+
         System.out.println("Loading data for week " + week + "... " + course.toUpperCase());
-        //readUsers(graduates, "data\\0. old MOOC\\data\\" + course + "\\" + course.toUpperCase() + "_graduates.csv");
-        readUsers(users, path + course.toUpperCase() + "_active.csv");
-        loadData(course, dataPath);
+
+        readUsers(users, path + "learners.csv");
+        readVideoLengths(path + "videos.csv");
+        readProblems(path + "problems.csv");
+
+        loadData(edition, dataPath);
+
         readMaximums(thresholdPath + "maximums.csv", week);
+        readScaledThresholds(thresholdPath + "scaled_thresholds.csv", week);
 
         System.out.println("Writing metrics for week " + week + "... " + course.toUpperCase());
         writeMetrics(users, week, metricsPath, metricsPath + "\\" + course.toUpperCase() + "_metrics.csv");
+
         System.out.println("Writing scaled metrics for week " + week + "... " + course.toUpperCase());
         writeScaledMetrics(users, week, metricsPath, metricsPath + "\\" + course.toUpperCase() + "_scaled_metrics.csv");
-        //writeGraduates(users, week, "data\\0. old MOOC\\" + course.toUpperCase() + "_metrics_graduates.csv");
-        //writeNonGraduates(users, week, "data\\0. old MOOC\\" + course.toUpperCase() + "_metrics_non_graduates.csv");
 
+        System.out.println("Writing file for database upload for week " + week + "... " + course.toUpperCase());
+        writeFileForDatabaseUpload(users, week, metricsPath, metricsPath + "\\" + course.toUpperCase() + "_week" + week + "_for_database.csv");
     }
 
     public static void computeThreshold(String course, int week, String path, int cutOffPercent) throws IOException, ParseException {
         String thresholdPath = path + "thresholds\\";
-        String dataPath = path + "week" + week + "\\data\\";
+        String dataPath = path + "2015\\";
         Edition edition = Edition.PREVIOUS;
 
         System.out.println("Initializing course... " + course.toUpperCase());
         initialize();
 
+        System.out.println("Computing study sittings for week " + week + " ... " + course.toUpperCase());
+        Sitting.computeSittings(dataPath + "graduates.csv", dataPath);
+
         System.out.println("Loading data... " + course.toUpperCase());
         readUsers(users, dataPath + "graduates.csv");
-        loadData(course, edition, dataPath);
+        readVideoLengths(dataPath + "videos.csv");
+        readProblems(dataPath + "problems.csv");
+
+        loadData(edition, dataPath);
 
         System.out.println("Writing average graduate values... " + course.toUpperCase());
         writeThresholds(week, thresholdPath, "thresholds.csv", cutOffPercent);
+
+        //write time on platform
+        //writeTime("data\\precalc\\timeeees.csv");
 
         System.out.println("Writing maximums... " + course.toUpperCase());
         writeMaximums(week, thresholdPath, "maximums.csv", cutOffPercent);
@@ -70,37 +91,56 @@ public class MetricComputation {
         writeScaledThresholds(week, thresholdPath, "scaled_thresholds.csv", cutOffPercent);
     }
 
+    private static void writeTime(String s) throws IOException {
+        CSVWriter output = new CSVWriter(new FileWriter(s), ',');
+        String[] toWrite;
 
+        toWrite = "User_id#Average time/week".split("#");
 
-    private static void initialize() {
+        output.writeNext(toWrite);
+
+        for(Map.Entry<String, UserMetricComputation> entry: users.entrySet()) {
+            toWrite[0] = entry.getKey();
+            toWrite[1] = String.valueOf(entry.getValue().getTimeOnPlatform(12) / 3600.0);
+
+            output.writeNext(toWrite);
+        }
+
+        output.close();
+    }
+
+    private static void initialize(){
         users = new HashMap<>();
         graduates = new ArrayList<>();
         problems = new HashMap<>();
         maximums = new HashMap<>();
+        videoLengths = new HashMap<>();
+        thresholds = new HashMap<>();
 
         metricMethods = new HashMap<>();
-        metricMethods.put(1, UserMetricComputation::getSessionsPerWeek);
-        metricMethods.put(2, UserMetricComputation::getAverageSessionLength);
-        metricMethods.put(3, UserMetricComputation::getAverageTimeBetweenSessions);
-        metricMethods.put(4, UserMetricComputation::getForumSessions);
-        metricMethods.put(5, UserMetricComputation::getQuizSubmissions);
-        metricMethods.put(6, UserMetricComputation::getRecommendedTimeliness);
-        metricMethods.put(7, UserMetricComputation::getSessions);
-        metricMethods.put(8, UserMetricComputation::getVideosAccessed);
-        metricMethods.put(9, UserMetricComputation:: getTimeOnPlatform);
+        metricMethods.put(1, UserMetricComputation::getAverageTimePerWeek);
+        metricMethods.put(2, UserMetricComputation::getLecturesRevisited);
+        metricMethods.put(3, UserMetricComputation::getForumActivity);
+        metricMethods.put(4, UserMetricComputation::getQuizAttempted);
+        metricMethods.put(5, UserMetricComputation::getProportionTimeOnQuiz);
+        metricMethods.put(6, UserMetricComputation::getTimeliness);
     }
 
     //READ
-    private static void loadData(String course, Edition edition, String path) throws IOException, ParseException {
+    private static void loadData(Edition edition, String dataPath) throws IOException, ParseException {
 
-        readSessions(course, edition, path + "sessions.csv");
+        //Utils.splitIntoWeeks(startDate, endDate);
+        readSittings(edition, dataPath + "sittings.csv");
 
-        readForumSessions(course, path + "forum_sessions.csv");
+        readForumSessions(edition, dataPath + "forum_sessions.csv");
 
-        readObservations(course, path + "observations.csv");
+        readQuizSessions(edition, dataPath + "\\learning_activities\\new_quiz_sessions.csv");
 
-        readProblems(path + "problems.csv");
-        readSubmissions(course, path + "submissions.csv");
+        readObservations(edition, dataPath + "video_interaction.csv");
+
+        readSubmissions(edition, dataPath + "submissions.csv");
+
+        readCollaborations(edition, dataPath + "forum_interaction.csv");
 
     }
 
@@ -119,19 +159,8 @@ public class MetricComputation {
         System.out.println("Learners read: " + users.size());
     }
 
-    private static void readUsers(List<String> group, String filename) throws IOException {
-        CSVReader csvReader = new CSVReader(new FileReader(filename));
-        String [] nextLine;
-
-        csvReader.readNext();
-
-        while ((nextLine = csvReader.readNext()) != null)
-            group.add(nextLine[0]);
-
-        csvReader.close();
-    }
-
-    private static void readSessions(String course, Edition edition, String filename) throws IOException, ParseException {
+    private static void readSittings(Edition edition, String filename) throws IOException, ParseException {
+        //User_id#Start time#End time#Duration
         CSVReader csvReader = new CSVReader(new FileReader(filename));
         String[] nextLine;
         int week, duration;
@@ -140,13 +169,13 @@ public class MetricComputation {
         nextLine = csvReader.readNext();
 
         while ((nextLine = csvReader.readNext()) != null) {
-            user_id = nextLine[1];
-            start = nextLine[2];
-            end = nextLine[3];
-            duration = Integer.parseInt(nextLine[4]);
+            user_id = nextLine[0];
+            start = nextLine[1];
+            end = nextLine[2];
+            duration = Integer.parseInt(nextLine[3]);
 
             if(users.containsKey(user_id)) {
-                week = Utils.getWeek(course, edition, start);
+                week = Utils.getWeek(edition, start);
 
                 if(week == 99)
                     continue;
@@ -159,33 +188,93 @@ public class MetricComputation {
         csvReader.close();
     }
 
-    private static void readForumSessions(String course, String filename) throws IOException, ParseException {
+    private static void readForumSessions(Edition edition, String filename) throws IOException, ParseException {
         //session_id, course_user_id, ??, start_time, end_time, duration
         CSVReader csvReader = new CSVReader(new FileReader(filename));
-        String[] nextLine, session_attr;
-        int duration, week;
-        String user_id, start, end;
+        String[] nextLine;
+        int duration, week, read = 0;
+        String userId, start, end;
 
-        nextLine = csvReader.readNext();
+        //nextLine = csvReader.readNext();
 
         while ((nextLine = csvReader.readNext()) != null) {
-            user_id = nextLine[1];
+            userId = nextLine[1];
             start = nextLine[3];
             end = nextLine[4];
             duration = Integer.parseInt(nextLine[5]);
 
-            if(users.containsKey(user_id)) {
-                week = Utils.getWeek(course, start);
-
-                if(week == 99)
+            if(users.containsKey(userId)) {
+                week = Utils.getWeek(edition, start);
+                if(week == 99) {
+                    System.out.println("99");
                     continue;
+                }
 
-                users.get(user_id).addForumSession(week, new ForumSession(user_id, start, end, duration));
+                users.get(userId).addForumSession(week, new ForumSession(userId, start, end, duration));
+
+                read++;
 
             }
         }
 
         csvReader.close();
+
+        System.out.println("Forum visits read: " + read);
+    }
+
+    private static void readQuizSessions(Edition edition, String filename) throws IOException, ParseException {
+        //session_id, course_user_id, start_time, end_time, duration
+        CSVReader csvReader = new CSVReader(new FileReader(filename));
+        String[] nextLine;
+        int duration, week, read = 0;
+        String userId, start, end;
+
+        nextLine = csvReader.readNext();
+
+        while ((nextLine = csvReader.readNext()) != null) {
+            userId = nextLine[1];
+            start = nextLine[2];
+            end = nextLine[3];
+            duration = Integer.parseInt(nextLine[4]);
+
+            if(users.containsKey(userId)) {
+                week = Utils.getWeek(edition, start);
+
+                if(week == 99)
+                    continue;
+
+                users.get(userId).addQuizSession(week, new QuizSession(userId, start, end, duration));
+
+                read++;
+
+            }
+        }
+
+        csvReader.close();
+
+        System.out.println("Quiz sessions read: " + read);
+    }
+
+    private static void readVideoLengths(String filename) throws IOException, ParseException {
+        //video_id, user_id, length, week
+        CSVReader csvReader = new CSVReader(new FileReader(filename));
+        String[] nextLine;
+        int length, week, read = 0;
+        String videoId;
+
+        while ((nextLine = csvReader.readNext()) != null) {
+            videoId = nextLine[0];
+            length = Integer.parseInt(nextLine[1]);
+
+            videoLengths.put(videoId, length);
+
+            read++;
+
+        }
+
+        csvReader.close();
+
+        System.out.println("Videos read: " + read);
     }
 
     private static void readProblems(String filename) throws IOException {
@@ -194,11 +283,9 @@ public class MetricComputation {
         int week;
         String problemId;
 
-        nextLine = csvReader.readNext();
-
         while ((nextLine = csvReader.readNext()) != null) {
             problemId = nextLine[0];
-            week = Integer.parseInt(nextLine[1]);
+            week = Integer.parseInt(nextLine[2]);
             problems.put(problemId, week);
         }
 
@@ -207,7 +294,7 @@ public class MetricComputation {
         System.out.println("Problems read: " + problems.size());
     }
 
-    private static void readSubmissions(String course, String filename) throws IOException, ParseException {
+    private static void readSubmissions(Edition edition, String filename) throws IOException, ParseException {
         CSVReader csvReader = new CSVReader(new FileReader(filename));
         String [] nextLine;
         UserMetricComputation user;
@@ -215,11 +302,10 @@ public class MetricComputation {
         String user_id, problem_id, timestamp, deadline;
         int sub = 0;
 
-        nextLine = csvReader.readNext();
-
         while ((nextLine = csvReader.readNext()) != null) {
             user_id = nextLine[1];
-            problem_id = nextLine[2];
+            problem_id = nextLine[2].split("\\@")[2];
+            //problem_id = nextLine[2];
             timestamp = Utils.formatTimestamp(nextLine[3]);
 
             user = users.get(user_id);
@@ -229,11 +315,12 @@ public class MetricComputation {
             if(!problems.containsKey(problem_id))   //ignore problems that are not graded
                 continue;
 
-            week = Utils.getWeek(course, timestamp);
-            if(week > 10)
+
+            week = Utils.getWeek(edition, timestamp);
+            if(week == 99)
                 continue;
 
-            deadline = Utils.getProblemDeadline(course, problems.get(problem_id));
+            deadline = Utils.getProblemDeadline(edition);
             user.addSubmission(week, new Submission(user_id, problem_id, timestamp, deadline));
 
             sub++;
@@ -244,15 +331,45 @@ public class MetricComputation {
         System.out.println("Submissions read: " + sub);
     }
 
-    private static void readObservations(String course, String filename) throws IOException, ParseException {
+    private static void readCollaborations(Edition edition, String filename) throws IOException, ParseException {
         CSVReader csvReader = new CSVReader(new FileReader(filename));
         String [] nextLine;
         UserMetricComputation user;
-        int week, duration;
-        String user_id, video_id, start, end;
+        int week;
+        String user_id, timestamp;
         int sub = 0;
 
-        nextLine = csvReader.readNext();
+        //nextLine = csvReader.readNext();
+
+        while ((nextLine = csvReader.readNext()) != null) {
+            user_id = nextLine[1];
+            timestamp = Utils.formatTimestamp(nextLine[5]);
+
+            user = users.get(user_id);
+            if (user == null)    //user are not in the active base -> ignore submission
+                continue;
+
+            week = Utils.getWeek(edition, timestamp);
+            if(week == 99)
+                continue;
+
+            user.addCollaboration(week);
+
+            sub++;
+        }
+
+        csvReader.close();
+
+        System.out.println("Collaborations read: " + sub);
+    }
+
+    private static void readObservations(Edition edition, String filename) throws IOException, ParseException {
+        CSVReader csvReader = new CSVReader(new FileReader(filename));
+        String [] nextLine;
+        UserMetricComputation user;
+        int week, duration, length;
+        String user_id, video_id, start, end;
+        int sub = 0;
 
         while ((nextLine = csvReader.readNext()) != null) {
             user_id = nextLine[1];
@@ -261,18 +378,23 @@ public class MetricComputation {
             if (user == null)    //user are not in the active set -> ignore observation
                 continue;
 
+            //video_id = nextLine[2].split("/")[5];
             video_id = nextLine[2];
-            start = nextLine[3];
-            end = nextLine[4];
-            duration = Integer.parseInt(nextLine[5]);
+            duration = Integer.parseInt(nextLine[3]);
+            start = nextLine[12];
+            end = nextLine[13];
 
-            week = Utils.getWeek(course, start);
-            if(week > 10)
+            if(!videoLengths.containsKey(video_id))
+                continue;
+
+            length = videoLengths.get(video_id);
+
+            week = Utils.getWeek(edition, start);
+            if(week == 99)
                 continue;
 
             //String problemId, int submissionWeek, Date submissionTime, Date problemDeadline
-            user.addVideoSession(week, new VideoSession(user_id, video_id, start, end, duration));
-
+            user.addVideoSession(week, new VideoSession(user_id, video_id, start, end, duration, length));
             sub++;
         }
 
@@ -298,6 +420,23 @@ public class MetricComputation {
         csvReader.close();
     }
 
+    private static void readScaledThresholds(String filename, int week) throws IOException {
+        CSVReader csvReader = new CSVReader(new FileReader(filename));
+        String [] nextLine;
+        int line = 1;
+
+        csvReader.readNext();
+
+        while ((nextLine = csvReader.readNext()) != null && line < week) {
+            line++;
+        }
+
+        for(int i = 1; i <= metricMethods.size(); i++)
+            thresholds.put(i, Double.parseDouble(nextLine[i]));
+
+        csvReader.close();
+    }
+
     //WRITE
     private static void writeMetrics(HashMap<String, UserMetricComputation> group, int week, String metricsPath, String filename) throws IOException {
 
@@ -307,7 +446,7 @@ public class MetricComputation {
         String[] toWrite;
         UserMetricComputation current;
 
-        toWrite = "User_id#Sessions/week#Length of session#Between sessions#Forum sessions#Assignments#Until deadline#Sessions#Videos#Time on platform".split("#");
+        toWrite = "User_id#Average time/week#Revisited video-lectures#Forum contributions#Assessment questions attempted#% time on assessments#Timeliness".split("#");
 
         output.writeNext(toWrite);
 
@@ -330,7 +469,7 @@ public class MetricComputation {
         String[] toWrite;
         UserMetricComputation current;
 
-        toWrite = "User_id#Sessions/week#Length of session#Between sessions#Forum sessions#Assignments#Until deadline#Sessions#Videos#Time on platform".split("#");
+        toWrite = "User_id#Average time/week#Revisited video-lectures#Forum contributions#Assessment questions attempted#% time on assessments#Timeliness".split("#");
 
         output.writeNext(toWrite);
 
@@ -354,7 +493,7 @@ public class MetricComputation {
         CSVWriter output = new CSVWriter(new FileWriter(thresholdsPpath + filename), ',');
         String[] toWrite;
 
-        toWrite = "#Sessions/week#Length of session#Between sessions#Forum sessions#Assignments#Until deadline#Sessions#Videos#Time on platform".split("#");
+        toWrite = "User_id#Average time/week#Revisited video-lectures#Forum contributions#Assessment questions attempted#% time on assessments#Timeliness".split("#");
 
         output.writeNext(toWrite);
 
@@ -376,14 +515,15 @@ public class MetricComputation {
         CSVWriter output = new CSVWriter(new FileWriter(thresholdsPath + filename), ',');
         String[] toWrite;
 
-        toWrite = "#Sessions/week#Length of session#Between sessions#Forum sessions#Assignments#Until deadline#Sessions#Videos#Time on platform".split("#");
+        toWrite = "User_id#Average time/week#Revisited video-lectures#Forum contributions#Assessment questions attempted#% time on assessments#Timeliness".split("#");
 
         output.writeNext(toWrite);
 
         for(int i = 1; i <= week; i++) {
             toWrite[0] = "Week " + i;
+            toWrite[1] = String.format("%.1f" , AverageGraduateComputation.getAverage(users, metricMethods.get(1), i, cutOffPercent) / 3600.0);
 
-            for(int j = 1; j <= metricMethods.size() ; j++)
+            for(int j = 2; j <= metricMethods.size() ; j++)
                 toWrite[j] = String.valueOf(AverageGraduateComputation.getAverage(users, metricMethods.get(j), i, cutOffPercent));
 
             output.writeNext(toWrite);
@@ -398,7 +538,7 @@ public class MetricComputation {
         CSVWriter output = new CSVWriter(new FileWriter(thresholdPaths + filename), ',');
         String[] toWrite;
 
-        toWrite = "#Sessions/week#Length of session#Between sessions#Forum sessions#Assignments#Until deadline#Sessions#Videos#Time on platform".split("#");
+        toWrite = "User_id#Average time/week#Revisited video-lectures#Forum contributions#Assessment questions attempted#% time on assessments#Timeliness".split("#");
 
         output.writeNext(toWrite);
 
@@ -414,66 +554,117 @@ public class MetricComputation {
         output.close();
     }
 
+    private static void writeFileForDatabaseUpload(HashMap<String, UserMetricComputation> group, int week, String metricsPath, String filename) throws IOException {
 
+        Utils.checkForDirectory(metricsPath);
 
-    private static void writeGraduates(HashMap<String, UserMetricComputation> users, int week, String filename) throws IOException {
         CSVWriter output = new CSVWriter(new FileWriter(filename), ',');
         String[] toWrite;
         UserMetricComputation current;
 
-        toWrite = "User_id#Sessions/week#Length of session#Between sessions#Forum sessions#Assignments#Until deadline#Sessions#Videos".split("#");
+        toWrite = "Week#User_id#Activity score#Average time/week#Revisited video-lectures#Forum contributions#Assessment questions attempted#% time on assessments#Timeliness#Scaled 1#Scaled 2#Scaled 3#Scaled 4#Scaled 5#Scaled 6".split("#");
 
         output.writeNext(toWrite);
 
-        for (Map.Entry<String, UserMetricComputation> entry : users.entrySet()) {
-            if(!graduates.contains(entry.getKey()))
-                continue;
-
+        for (Map.Entry<String, UserMetricComputation> entry : group.entrySet()) {
             current = entry.getValue();
-            toWrite[0] = entry.getKey();
-            //toWrite[1] = String.valueOf(current.getSessionsPerWeek(week));
-            //toWrite[2] = String.valueOf(current.getAverageSessionLength(week));
-            //toWrite[3] = String.valueOf(current.getAverageTimeBetweenSessions(week));
-            toWrite[4] = String.valueOf(current.getForumSessions(week));
-            //toWrite[5] = String.valueOf(current.getQuizSubmissions(week));
-            //toWrite[6] = String.valueOf(current.getRecommendedTimeliness(week));
-            //toWrite[7] = String.valueOf(current.getSessions(week));
-            toWrite[8] = String.valueOf(current.getVideosAccessed(week));
+
+            toWrite[0] = String.valueOf(week);
+            toWrite[1] = entry.getKey().split("_")[1];
+            toWrite[2] = String.format("%.2f" ,computeStatus(current, week));
+
+            toWrite[3] = String.format("%.1f", current.getAverageTimePerWeek(week) / 3600.0);
+            //write metrics
+            for(int i = 2; i <= metricMethods.size(); i++)
+                toWrite[i+2] = String.valueOf(metricMethods.get(i).apply(current, week));
+
+            //convert hours to days for timeliness
+            toWrite[8] = String.valueOf((int) Math.round(Integer.parseInt(toWrite[8]) / 24.0));
+            //write scaled metrics
+            for(int i = 1; i <= metricMethods.size(); i++)
+                toWrite[i+8] = String.format("%.1f", ScalingComputation.scaleMetricValue(metricMethods.get(i).apply(current, week), maximums.get(i)));
 
             output.writeNext(toWrite);
         }
         output.close();
     }
 
-    private static void writeNonGraduates(HashMap<String, UserMetricComputation> users, int week, String filename) throws IOException {
-        CSVWriter output = new CSVWriter(new FileWriter(filename), ',');
-        String[] toWrite;
-        UserMetricComputation current;
+    public static double computeStatus(UserMetricComputation user, int week) {
+        List<Double> difference = new ArrayList<>();
+        difference.add(0.0);
+        double scaled_value;
 
-        toWrite = "User_id#Sessions/week#Length of session#Between sessions#Forum sessions#Assignments#Until deadline#Sessions#Videos".split("#");
+        for(int i = 1; i <= metricMethods.size(); i++) {
+            scaled_value = ScalingComputation.scaleMetricValue(metricMethods.get(i).apply(user, week), maximums.get(i));
+            difference.add(i, scaled_value - thresholds.get(i));
 
-        output.writeNext(toWrite);
-
-        for (Map.Entry<String, UserMetricComputation> entry : users.entrySet()) {
-            if(graduates.contains(entry.getKey()))
-                continue;
-
-            current = entry.getValue();
-            toWrite[0] = entry.getKey();
-            //toWrite[1] = String.valueOf(current.getSessionsPerWeek(week));
-            //toWrite[2] = String.valueOf(current.getAverageSessionLength(week));
-            //toWrite[3] = String.valueOf(current.getAverageTimeBetweenSessions(week));
-            toWrite[4] = String.valueOf(current.getForumSessions(week));
-            //toWrite[5] = String.valueOf(current.getQuizSubmissions(week));
-            //toWrite[6] = String.valueOf(current.getRecommendedTimeliness(week));
-            //toWrite[7] = String.valueOf(current.getSessions(week));
-            toWrite[8] = String.valueOf(current.getVideosAccessed(week));
-
-            output.writeNext(toWrite);
         }
-        output.close();
+            /*if(Math.abs(diff) <= 0.5)
+                difference.add(i, 0.0);
+            else if (diff > 0)
+                difference.add(i, diff - 0.5);
+            else
+                difference.add(i, diff + 0.5);*/
+
+        //System.out.print("User: " + user.getId() + " -- ");
+        return weightedSum(difference);
     }
 
+    private static double weightedSum(List<Double> difference) {
+        double sum = difference.stream().map(d -> Math.abs(d)).reduce(Double::sum).get().doubleValue();  //pure sum
+        //System.out.println(sum);
+        double weightedSum = 0;
+
+        for (int i = 1; i < difference.size(); i++) {
+            weightedSum += (10 - difference.get(i)) * difference.get(i);
+        }
+
+        return weightedSum / (60 - sum);
+    }
+    
+    
+    //// TODO: 7/14/2016 remove after 
+
+    private static void initializeST(){
+        users = new HashMap<>();
+        graduates = new ArrayList<>();
+        problems = new HashMap<>();
+        maximums = new HashMap<>();
+        videoLengths = new HashMap<>();
+        thresholds = new HashMap<>();
+
+        metricMethods = new HashMap<>();
+        metricMethods.put(1, UserMetricComputation::getSessionsPerWeek);
+        metricMethods.put(2, UserMetricComputation::getAverageSessionLength);
+        metricMethods.put(3, UserMetricComputation::getAverageTimeBetweenSessions);
+        metricMethods.put(4, UserMetricComputation::getForumSessions);
+        metricMethods.put(5, UserMetricComputation::getQuizAttempted);
+        metricMethods.put(6, UserMetricComputation::getTimeliness);
+        metricMethods.put(7, UserMetricComputation::getSessions);
+    }
+    
+    public static void computeMetricsST(String course, int week, String path) throws IOException, ParseException {
+        String dataPath = path + "\\data\\";
+        String metricsPath = path + "\\metrics\\";
+        Edition edition = Edition.CURRENT;
+
+        System.out.println("Initializing course for week " + week + " ... " + course.toUpperCase());
+        initializeST();
+
+        System.out.println("Loading data for week " + week + "... " + course.toUpperCase());
+
+        readUsers(users, dataPath + "learners.csv");
+        readProblems(dataPath + "problems.csv");
+
+        loadData(edition, dataPath);
+
+        System.out.println("Writing metrics for week " + week + "... " + course.toUpperCase());
+        writeMetrics(users, week, metricsPath, metricsPath + "\\" + course.toUpperCase() + "_metrics.csv");
+
+    }
+    
+    
+    
 }
 
 class AverageGraduateComputation {
@@ -490,6 +681,9 @@ class AverageGraduateComputation {
 
         double average;
 
+        if(getCutOffRange(allMetricValues, cutOffPercent).size() == 0)
+            return 0;
+
         average = Math.round(getCutOffRange(allMetricValues, cutOffPercent)
                 .stream()
                 .mapToInt(e -> e)
@@ -503,10 +697,14 @@ class AverageGraduateComputation {
     }
 
     private static int getMaximum(List<Integer> integers) {
+        if (integers.size() == 0)
+            return 0;
         return integers.stream().max(Comparator.naturalOrder()).get();
     }
 
     private static int getMinimum(List<Integer> integers) {
+        if (integers.size() == 0)
+            return 0;
         return integers.stream().min(Comparator.naturalOrder()).get();
     }
 

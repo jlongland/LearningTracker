@@ -1,7 +1,9 @@
 import javafx.util.Pair;
 
+import java.text.ParseException;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
 /**
@@ -14,7 +16,9 @@ public class UserMetricComputation {
     private HashMap<Integer, List<Session>> sessions;
     private HashMap<Integer, List<VideoSession>> videoSessions;
     private HashMap<Integer, List<ForumSession>> forumSessions;
+    private HashMap<Integer, List<QuizSession>> quizSessions;
     private HashMap<Integer, List<Submission>> quizSubmissions;
+    private HashMap<Integer, Integer> collaborations;
 
     public UserMetricComputation(String id) {
         this.id =  id;
@@ -22,7 +26,9 @@ public class UserMetricComputation {
         sessions = new HashMap<>();
         videoSessions = new HashMap<>();
         forumSessions = new HashMap<>();
+        quizSessions = new HashMap<>();
         quizSubmissions = new HashMap<>();
+        collaborations = new HashMap<>();
 
     }
 
@@ -49,6 +55,17 @@ public class UserMetricComputation {
         forumSessionList.add(forumSession);
     }
 
+    public void addQuizSession(int week, QuizSession quizSession) {
+        List<QuizSession> quizSessionList = quizSessions.get(week);
+
+        if(quizSessionList == null) {
+            quizSessionList = new ArrayList<>();
+            quizSessions.put(week, quizSessionList);
+        }
+
+        quizSessionList.add(quizSession);
+    }
+
     public void addSubmission(int week, Submission submission) {
         List<Submission> submissionList = quizSubmissions.get(week);
 
@@ -71,7 +88,14 @@ public class UserMetricComputation {
         videoSessionList.add(videoSession);
     }
 
+    public void addCollaboration(int week) {
+        if(collaborations.containsKey(week))
+            collaborations.put(week, collaborations.get(week) + 1);
+        else
+            collaborations.put(week, 1);
+    }
 
+    //Methods for calculating metrics
     //Metric 1: Sessions per week
     public int getSessionsPerWeek(int week) {
         int sessionCount = getSessions(week);
@@ -140,7 +164,7 @@ public class UserMetricComputation {
     }
 
     //Metric 5. Quiz answers submitted
-    public int getQuizSubmissions(int week) {
+    public int getQuizAttempted(int week) {
         List<Submission> allSubmissions = new ArrayList<>();
 
         for(int i = 1; i <= week; i++)
@@ -150,8 +174,8 @@ public class UserMetricComputation {
         return (int) allSubmissions.stream().map(s -> s.getProblem()).distinct().count();
     }
 
-    //Metric 6. Timeliness according to the recommended deadline - one/two weeks after publication of new material
-    public int getRecommendedTimeliness(int week) {
+    //Metric 6. Timeliness according to the actual deadline = end of the course
+    public int getTimeliness(int week){
         List<Submission> allSubmissions = new ArrayList<>();
         List<String> attemptedProblems;
         List<Pair<String, Long>> problemTimeliness, minimumProblemTimeliness = new ArrayList<>();
@@ -227,16 +251,75 @@ public class UserMetricComputation {
         return timeOnPlatform;
     }
 
+    //Metric 10: Average time per week
+    public int getAverageTimePerWeek(int week) {
 
-
-/*
-
-
-    //Auxiliary methods
-    public String getId() {
-        return id;
+        return getTimeOnPlatform(week)/week;
     }
 
-*/
+    //Metric 11: Proportion of time spent on assessments
+    public int getProportionTimeOnQuiz(int week) {
+        int timeOnPlatform = getTimeOnPlatform(week);
+        int timeOnQuiz = 0;
+
+        for(int i = 1; i <= week; i++) {
+            if(quizSessions.containsKey(i))
+                timeOnQuiz += quizSessions.get(i).stream().mapToInt(s -> s.getDuration()).sum();
+        }
+
+        if(timeOnPlatform == 0)
+            return 0;
+        return timeOnQuiz * 100 / timeOnPlatform;
+    }
+
+    //Metric 12: # Video lectures revisited
+    public int getLecturesRevisited(int week) {
+        List<String> videosAccessed = new ArrayList<>();
+        List<VideoSession> allVideoSessions = new ArrayList<>();
+        int revisited = 0;
+
+        for(int i = 1; i <= week; i++)
+            if(videoSessions.containsKey(i))
+                allVideoSessions.addAll(videoSessions.get(i));
+
+        //get a list of all the videos watched
+        videosAccessed.addAll(allVideoSessions
+                .stream()
+                .map(e -> e.getVideoId())
+                .distinct()
+                .collect(Collectors.toList()));
+
+        //for each video - check if it more than 80% and viewed multiple times
+        for (String video: videosAccessed) {
+            List<VideoSession> videoSessionsForVideo = allVideoSessions.stream()
+                    .filter(e -> video.compareTo(e.getVideoId()) == 0)
+                    .collect(Collectors.toList());
+
+            if (videoSessionsForVideo.size() < 2)
+                continue;
+
+            int timeViewed = videoSessionsForVideo.stream().mapToInt(e -> e.getDuration()).sum();
+            int videoLength = videoSessionsForVideo.get(0).getVideoLength();
+
+            if(timeViewed * 100 / videoLength >= 80)
+                revisited++;
+        }
+
+        return revisited;
+
+    }
+
+    //Metric 13: # activities in the forum
+    public int getForumActivity(int week){
+        int collabs = 0;
+
+        for(int i = 1; i <= week; i++)
+            if(collaborations.containsKey(i))
+                collabs += collaborations.get(i);
+
+        return collabs;
+    }
+
+    public String getId() { return this.id; }
 
 }

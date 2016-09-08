@@ -1,3 +1,5 @@
+import java.text.ParseException;
+
 /**
  * Created by Ioana on 6/8/2016.
  */
@@ -20,8 +22,7 @@ public class Submission {
 
     public String getDeadline() { return this.deadline; }
 
-    public long getTimeliness() {
-
+    public long getTimeliness(){
         return Utils.differenceBetweenDatesInHours(deadline, timestamp);
     }
 }
