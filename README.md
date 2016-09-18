@@ -22,7 +22,8 @@ Thresholds are calculated using the method `computeThreshold` in the class `Metr
 8. Results are placed in the folder "precalc/weekX/metrics/". Data ready for upload is in the file "PRECALC_week4_for_database.csv"
 9. For uploading on the mySQL database, the first row (header of the table) should be delete.
 
-## Step 2: Upload the file PRECALC_week4_for_database.csv on idxmooc.ewi.tudelft.nl server and add it to the learning_tracker database.
+## Step 2: Upload data to the database on the server.
+The file PRECALC_week4_for_database.csv is uploaded on idxmooc.ewi.tudelft.nl server and add it to the learning_tracker database.
 
 ## Step 3: Integration on edX.
 The code in the folder `edX integration` is inserted into edX as JavaScript script in a Raw HTML component on the MOOC pages.
