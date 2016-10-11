@@ -1,9 +1,26 @@
 # Learning Tracker
 
-The code for the Learning Tracker has three parts:
-1. Code for generating the metric values - written in Java8.
-2. Code for generating the Learning Tracker script.
-3. Code for integrating the Learning Tracker on edX.
+## Introduction
+TODO
+
+## Working architecture
+
+The working architecture of the Learning Tracker has three components as shown in the figure below.
+1. Local component - computing the information to be displayed on the widget based on the data extracted from the trace logs of learners (Java8).
+2. Server backend - hosting a Tomcat servlet that generates the Learning Tracker script for each learner when requests are made from the edX course pages (Java8).
+3. edX component - integrating the Learning Tracker on edX course pages (JavaScript).
+
+![Technical architecture](images/LT_working_architecture.svg)
+
+## 1. Local component - metric calculation
+TODO
+
+## 2. Server backend - data storing and script generation
+The server backend serves two purposes:
+a. storing online for easier access the data that is to be displayed on the widget in a MySQL database
+b. serving HTTPS requests from the edX pages 
+
+
 
 The code for generating the metric values and the script are customizable for every run of the experiment. The current implementation calculates 15 metrics. The metrics to be displayed on the Learning Tracker are selected in the `initialize` method of the `MetricComputation` class.
 
