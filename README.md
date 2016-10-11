@@ -10,7 +10,7 @@ The working architecture of the Learning Tracker has three components as shown i
 2. Server backend - hosting a Tomcat servlet that generates the Learning Tracker script for each learner when requests are made from the edX course pages (Java8).
 3. edX component - integrating the Learning Tracker on edX course pages (JavaScript).
 
-![Technical architecture](images/LT_working_architecture.svg)
+![Technical architecture](images/LT_working_architecture.png)
 
 ## 1. Local component - metric calculation
 TODO
