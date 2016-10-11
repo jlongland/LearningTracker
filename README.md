@@ -3,24 +3,36 @@
 ## Introduction
 TODO
 
-## Working architecture
+## Functional architecture
 
 The working architecture of the Learning Tracker has three components as shown in the figure below.
-1. Local component - computing the information to be displayed on the widget based on the data extracted from the trace logs of learners (Java8).
+1. edX component - integrating the Learning Tracker on edX course pages (JavaScript).
 2. Server backend - hosting a Tomcat servlet that generates the Learning Tracker script for each learner when requests are made from the edX course pages (Java8).
-3. edX component - integrating the Learning Tracker on edX course pages (JavaScript).
+3. Local component - computing the information to be displayed on the widget based on the data extracted from the trace logs of learners (Java8).
+
 
 ![Technical architecture](images/LT_working_architecture.png)
 
-## 1. Local component - metric calculation
-TODO
+### 1. edX component
+*TODO*
+Thresholds are calculated using the method `computeThreshold` in the class `MetricComputation`. The results will be placed in the folder `thresholds` and used in the subsequent steps.
 
-## 2. Server backend - data storing and script generation
+### 2. Server backend - data storing and script generation
 The server backend serves two purposes:
-a. storing online for easier access the data that is to be displayed on the widget in a MySQL database
-b. serving HTTPS requests from the edX pages 
+1. storing online the learner data that is to be displayed on the widget
+2. generating the widget script for a learner
 
+**Storing learner data**
+The data is stored in a mySQL database and updated weekly. For 
+**Generating widget scripts**
+serving HTTPS requests from the edX pages that request the script of
 
+The server backend is implemented as a Tomcat servlet that receives HTTPS requests and responds with the generated Learning Tracker script as a string. 
+
+## 3. Local component - metric calculation
+*TODO*
+
+==== Old version ====
 
 The code for generating the metric values and the script are customizable for every run of the experiment. The current implementation calculates 15 metrics. The metrics to be displayed on the Learning Tracker are selected in the `initialize` method of the `MetricComputation` class.
 
@@ -45,8 +57,5 @@ The file PRECALC_week4_for_database.csv is uploaded on idxmooc.ewi.tudelft.nl se
 ## Step 3: Integration on edX.
 The code in the folder `edX integration` is inserted into edX as JavaScript script in a Raw HTML component on the MOOC pages.
 The Learning Tracker script is loaded as an external script from the server through HTTPS requests. The HTTPS request parameters are the anonymous ID of the learners and the week for which data is requested. 
-
-##Step 4: Server backend
-The server backend is implemented as a Tomcat servlet that receives HTTPS requests and responds with the generated Learning Tracker script as a string. The data is stored in a mySQL database and updated weekly.
 
 
