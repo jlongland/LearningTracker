@@ -12,7 +12,7 @@ The working architecture of the Learning Tracker has three components as shown i
 3. Local component - computing the information to be displayed on the widget based on the data extracted from the trace logs of learners (Java8).
 
 
-![Technical architecture](images/LT_working_architecture.png)
+![Technical architecture](doc/LT_working_architecture.png)
 
 ### 1. edX component - widget script
 In essence, the Learning Tracker is a JavaScript script embedded in the edX MOOC pages as part of the course material. The widget is plotted using [Highcharts](highcharts.com). The documentation for customizing the widget is [here](http://api.highcharts.com/highcharts).
